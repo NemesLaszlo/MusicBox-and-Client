@@ -56,8 +56,9 @@ class ReaderFromServer extends Thread {
     public void run() {
         while(input.hasNextLine()) {
             String line = input.nextLine();
+            String[] str = line.split(" ");
             System.out.println(line);
-            if(line.equals("Playing")) {
+            if(str[0].equals("Playing")) {
                 try(Synthesizer synth = MidiSystem.getSynthesizer()){
                         synth.open();
                         MidiChannel channel = synth.getChannels()[0];
@@ -89,7 +90,7 @@ class ReaderFromServer extends Thread {
                                 if(ind != -1){
                                     nval += 12 * Character.getNumericValue(tmp[0].charAt(ind+1));
                                 }
-                                System.out.println(nval);
+                                //System.out.println(nval);
                                 channel.noteOn(nval,1000);
                             }
                         }

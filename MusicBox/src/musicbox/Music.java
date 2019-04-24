@@ -9,7 +9,6 @@ abstract class Part {
 
 public class Music {
     
-    private int id;
     private String title;
     private List<Part> sounds;
     private List<String> lyrics;
@@ -18,11 +17,6 @@ public class Music {
         this.title = title;
         sounds = new ArrayList<>();
         lyrics = new ArrayList<>();
-        this.id = id;
-    }
-
-    public int getId() {
-        return id;
     }
     
     public String getTitle() {

@@ -26,7 +26,7 @@ class Accepter extends Thread {
     public List<Client> list;
     public List<Music> musics = new ArrayList<>();
 
-    public Accepter(List<Client> musics) {
+    public Accepter(List<Client> list) {
         this.list = list;
         
     }
@@ -44,15 +44,16 @@ class Accepter extends Thread {
                 list.add(c);
             }
         } catch(Exception e) {
+            System.out.println("Connection Error");
         } 
     }
 }
 
 class Client extends Thread {
-    private final Socket s;
-    private final PrintWriter out;
-    private final Scanner in;
-    private final List<Music> musics;
+    private Socket s;
+    private PrintWriter out;
+    private Scanner in;
+    private List<Music> musics;
     private MidiConverter converter;
     
     public Client(Socket s, List<Music> musics) throws IOException {
@@ -61,6 +62,41 @@ class Client extends Thread {
         out = new PrintWriter(s.getOutputStream());
         in = new Scanner(s.getInputStream());
         converter = new MidiConverter();
+    }
+   
+    @Override
+    public void run() {
+        try{
+        while(true) {
+            out.println("Give your order");
+            out.flush();
+            String line = in.nextLine();
+            String[] str = line.split(" ");
+            switch(str[0]) {
+                case "add":
+                    add(str[1]);
+                    break;
+                case "addlyrics":
+                    addlyrics(str[1]);
+                    break;
+                case "play":
+                    try {
+                        play(Long.parseLong(str[1]), Integer.parseInt(str[2]), str[3]);
+                    }catch(NumberFormatException | InterruptedException e) {
+                        System.out.println("Playing Error");
+                        out.println("Playing Error!");
+                        out.flush();
+                    }
+                    break;
+                case "change":
+                    break;
+                case "stop":
+                    break;
+            }
+        }
+        }catch(Exception e){
+            //e.printStackTrace();
+        }
     }
     
     public void close() throws Exception {
@@ -76,6 +112,12 @@ class Client extends Thread {
     }
     
     public void add(String title) {
+        for(Music x : musics) {
+            if(x.getTitle().equals(title)){
+                out.println("This song is already exist!");
+                out.flush();
+            }
+        }
         Music newMusic = new Music(title, musics.size());
         out.println("Give the sounds:");
         out.flush();
@@ -97,7 +139,6 @@ class Client extends Thread {
         addToList(newMusic);
         System.out.println("New Song: " + title);
         System.out.println("Sounds added for song: " + title);
-        System.out.println("Library size: " + musics.size());
     }
     
     public void addlyrics(String title) {
@@ -171,37 +212,6 @@ class Client extends Thread {
         }
         return 0;
     }
-       
-    @Override
-    public void run() {
-        while(true) {
-            out.println("Give your order");
-            out.flush();
-            String line = in.nextLine();
-            String[] str = line.split(" ");
-            switch(str[0]) {
-                case "add":
-                    add(str[1]);
-                    break;
-                case "addlyrics":
-                    addlyrics(str[1]);
-                    break;
-                case "play":
-                    try {
-                        play(Long.parseLong(str[1]), Integer.parseInt(str[2]), str[3]);
-                    }catch(NumberFormatException | InterruptedException e) {
-                        System.out.println("Playing Error");
-                        out.println("Playing Error!");
-                        out.flush();
-                    }
-                    break;
-                case "change":
-                    break;
-                case "stop":
-                    break;
-            }
-        }
-    }
-   
+    
 }
 
