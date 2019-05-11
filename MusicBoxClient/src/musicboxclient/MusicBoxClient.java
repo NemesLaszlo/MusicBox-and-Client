@@ -75,24 +75,30 @@ class ReaderFromServer extends Thread {
                                 Thread.sleep(2000);
                                 break;
                             } else {
-                                System.out.println(tmp[0] + " " + tmp[1]);
+                                if(tmp[0].isEmpty()){
+                                    System.out.println(" " + " " + " ");
+                                }else{
+                                    System.out.println(tmp[0] + " " + tmp[1]);
+                                } 
                             }
-
-                            int c = tmp[0].charAt(0) - 65;
-                            if(c > -1 && c < 7){
-                                nval = note[c];
-                                if(tmp[0].indexOf('#') != -1){
-                                    nval++;
-                                } else if (tmp[0].indexOf('b') != -1){
-                                    nval--;
+                            if(!tmp[0].isEmpty() ){
+                                int c = tmp[0].charAt(0) - 65;
+                                if(c > -1 && c < 7){
+                                    nval = note[c];
+                                    if(tmp[0].indexOf('#') != -1){
+                                        nval++;
+                                    } else if (tmp[0].indexOf('b') != -1){
+                                        nval--;
+                                    }
+                                    int ind = tmp[0].indexOf('/');
+                                    if(ind != -1){
+                                        nval += 12 * Character.getNumericValue(tmp[0].charAt(ind+1));
+                                    }
+                                    //System.out.println(nval);
+                                    channel.noteOn(nval,1000);
                                 }
-                                int ind = tmp[0].indexOf('/');
-                                if(ind != -1){
-                                    nval += 12 * Character.getNumericValue(tmp[0].charAt(ind+1));
-                                }
-                                //System.out.println(nval);
-                                channel.noteOn(nval,1000);
                             }
+                            
                         }
                 }catch(Exception e){
                     e.printStackTrace();
