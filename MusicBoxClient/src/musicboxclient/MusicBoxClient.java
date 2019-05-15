@@ -75,7 +75,7 @@ class ReaderFromServer extends Thread {
                                 Thread.sleep(2000);
                                 break;
                             } else {
-                                if(tmp[0].isEmpty()){
+                                if(tmp[0].equals("R")){
                                     System.out.println(" " + " " + " ");
                                 }else{
                                     System.out.println(tmp[0] + " " + tmp[1]);
@@ -130,6 +130,5 @@ class WriterToServer extends Thread {
         }   
     }
 }
-
 
 

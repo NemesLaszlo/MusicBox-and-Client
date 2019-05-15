@@ -5,115 +5,118 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.*;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Optional;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MusicBox {
-
-    public static void main(String[] args) {
-
-        List<Client> clients = new ArrayList<>();
-        Accepter accepter = new Accepter(clients);
-        accepter.start();
-
+    public static void main(String[] args) throws InterruptedException, IOException {
+            Accepter server = new Accepter();
+            server.start();
     }
 }
 
 class Accepter extends Thread {
-    public ServerSocket ss;
-    public List<Client> list;
-    public List<Music> musics = new ArrayList<>();
-    public static AtomicInteger counter = new AtomicInteger(0);
-    public HashMap<Integer,ArrayList<Integer>> nowPlaying;
 
-    public Accepter(List<Client> list) {
-        this.list = list;
+    private ServerSocket serverSocket;
+    public ArrayList<Client> clients;
+    public HashMap<String, ArrayList<Input>> songs;
+    public HashMap<String, ArrayList<String>> lyrics;
+    public static AtomicInteger counter = new AtomicInteger(0);
+    public HashMap<Integer, ArrayList<Integer>> nowPlaying;
+
+    public Accepter() throws IOException {
+        this.serverSocket = new ServerSocket(40000);
+        this.clients = new ArrayList<>();
+        this.songs = new HashMap<>();
+        this.lyrics = new HashMap<>();
         this.nowPlaying = new HashMap<>();
-        
     }
 
     @Override
     public void run() {
         System.out.println("Starting accepter");
-        try{
-            this.ss = new ServerSocket(40000);
-            while (true) {
-                Socket s = ss.accept();
-                System.out.println(s.getRemoteSocketAddress());
-                Client c = new Client(s,musics);
-                c.nowPlaying = this.nowPlaying;
-                c.start();
-                synchronized(list) {
-                    list.add(c);   
+        while (true) {
+            try {
+                Socket s = serverSocket.accept();
+                Client client = new Client(s, clients, songs, lyrics);
+                client.nowPlaying = this.nowPlaying;
+                client.start();
+                synchronized (clients) {
+                    clients.add(client);
                 }
-
+                System.out.println(s.getRemoteSocketAddress());
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        } catch(Exception e) {
-            System.out.println("Connection Error");
-        } 
+        }
+
     }
 }
 
 class Client extends Thread {
+
     private Socket s;
-    private PrintWriter out;
+    private ArrayList<Client> clients;
+    private HashMap<String, ArrayList<Input>> songs;
+    private HashMap<String, ArrayList<String>> lyrics;
     private Scanner in;
-    private List<Music> musics;
-    public HashMap<Integer,ArrayList<Integer>> nowPlaying;
-    
-    public Client(Socket s, List<Music> musics) throws IOException {
-        this.s = s;
-        this.musics = musics;
-        out = new PrintWriter(s.getOutputStream());
-        in = new Scanner(s.getInputStream());
+    private PrintWriter out;
+    public HashMap<Integer, ArrayList<Integer>> nowPlaying;
+
+    public Client(Socket socket, ArrayList<Client> clients, HashMap<String, ArrayList<Input>> songs,
+        HashMap<String, ArrayList<String>> lyrics) throws IOException {
+        this.s = socket;
+        this.clients = clients;
+        this.in = new Scanner(socket.getInputStream());
+        this.out = new PrintWriter(socket.getOutputStream());
+        this.songs = songs;
+        this.lyrics = lyrics;
     }
-   
+
     @Override
     public void run() {
-        while(in.hasNextLine()) {
-            String line = in.nextLine();
-            String[] str = line.split(" ");
-            switch(str[0]) {
-                case "add":
-                    add(str[1]);
-                    break;
-                case "addlyrics":
-                    addlyrics(str[1]);
-                    break;
-                case "play":
-                    try {
-                        play(Integer.parseInt(str[1]), Integer.parseInt(str[2]), str[3]);
-                    }catch(NumberFormatException | InterruptedException e) {
-                        System.out.println("Playing Error");
-                        out.println("Playing Error!");
-                        out.flush();
-                    }
-                    break;
-                case "change":
-                    synchronized(nowPlaying){
-                        int ind = Integer.parseInt(str[1]);
-                        nowPlaying.get(ind).set(0, Integer.parseInt(str[2]));
-                        if(str.length > 3){
-                            nowPlaying.get(ind).set(1, Integer.parseInt(str[3]));
+        try {
+            while (in.hasNextLine()) {
+                String[] cmd = in.nextLine().split(" ");
+                try{
+                    switch (cmd[0]) {
+                    case "add":
+                        add(cmd[1]);
+                        break;
+                    case "addlyrics":
+                        addlyrics(cmd[1]);
+                        break;
+                    case "play":
+                        playSong(Integer.parseInt(cmd[1]), Integer.parseInt(cmd[2]), cmd[3]);
+                        break;
+                    case "change":
+                        synchronized (nowPlaying) {
+                            int ind = Integer.parseInt(cmd[1]);
+                            nowPlaying.get(ind).set(0, Integer.parseInt(cmd[2]));
+                            if (cmd.length > 3) {
+                                nowPlaying.get(ind).set(1, Integer.parseInt(cmd[3]));
+                            } else {
+                                nowPlaying.get(ind).set(1, 0);
+                            }
                         }
+                        break;
+                    case "stop":
+                        synchronized (nowPlaying) {
+                            int ind = Integer.parseInt(cmd[1]);
+                            nowPlaying.get(ind).set(2, -1);
+                        }
+                        break;
+                    default:
+                        System.out.println("Unknown command");
+                        break;
                     }
-                    break;
-                case "stop":
-                    synchronized(nowPlaying){
-                        int ind = Integer.parseInt(str[1]);
-                        nowPlaying.get(ind).set(2, -1);
-                    }
-                    break;
-                default:
-                    System.out.println("Unknown command");
-                    break;
+                }catch(Exception e){
+                    e.printStackTrace();
+                }
             }
-        }
         System.out.println("Client disconnected");
         try {
             close();
@@ -121,6 +124,9 @@ class Client extends Thread {
             e.printStackTrace();
         }
         
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
     
     public void close() throws Exception {
@@ -129,29 +135,16 @@ class Client extends Thread {
         s.close();
     }
     
-    public void addToList(Music music ) {
-        synchronized(musics) {
-            musics.add(music);
-        }
-    }
-    
     public void add(String title) {
-        for(Music x : musics) {
-            if(x.getTitle().equals(title)){
-                out.println("This song is already exist!");
-                out.flush();
-            }
-        }
-        Music newMusic = new Music(title, musics.size());
         out.println("Give the sounds:");
         out.flush();
-        ArrayList<Part> inputs = new ArrayList<>();
+        ArrayList<Input> inputs = new ArrayList<>();
         String[] input = in.nextLine().split(" ");
         int i = 0;
-        while(i<input.length){
+        while (i < input.length) {
             String note = input[i++];
             String tmp = input[i++];
-            if(tmp.contains(";")){
+            if (tmp.contains(";")) {
                 Repeat rep = new Repeat(Integer.parseInt(tmp.split(";")[0]), Integer.parseInt(tmp.split(";")[1]));
                 inputs.add(rep);
             } else {
@@ -159,10 +152,9 @@ class Client extends Thread {
                 inputs.add(sound);
             }
         }
-        newMusic.setSounds(inputs);
-        addToList(newMusic);
-        System.out.println("New Song: " + title);
-        System.out.println("Sounds added for song: " + title);
+        songs.put(title, inputs);
+        lyrics.put(title, new ArrayList<>());
+        System.out.println("Song added: " + title);
     }
     
     public void addlyrics(String title) {
@@ -170,86 +162,75 @@ class Client extends Thread {
         out.flush();
         String[] tmp = in.nextLine().split(" ");
         List<String> list = Arrays.asList(tmp);
-        for(Music x : musics) {
-            if(x.getTitle().equals(title)) {
-                x.setLyrics(list);
-            }
-        }
+        lyrics.put(title, new ArrayList<>(list));
         System.out.println("Lyrics added for song: " + title);
     }
-    
-    public void play(int tempo, int transponate, String title ) throws InterruptedException {
-        List<String> lyrics = null;
-        List<Part> sound = null;
-        for(Music x : musics) {
-            if(!x.getTitle().equals(title)) {
-                out.println("FIN");
-                out.flush();
-                break;
-            }else {
-                lyrics = x.getLyrics();
-                sound = x.getSounds();
-            }
+
+    public void playSong(int tempo, int trans, String title) throws InterruptedException {
+        if (!songs.containsKey(title)) {
+            out.println("FIN");
+            out.flush();
+            return;
         }
-        
+
         int j = Accepter.counter.incrementAndGet();
         out.println("Playing " + j);
         out.flush();
-        synchronized(nowPlaying){
+        synchronized (nowPlaying) {
             ArrayList<Integer> list = new ArrayList<>();
             list.add(tempo);
-            list.add(transponate);
+            list.add(trans);
             list.add(0);
             nowPlaying.put(j, list);
-            System.out.println(nowPlaying.get(j).get(0) + " "+ nowPlaying.get(j).get(1) + " "+nowPlaying.get(j).get(2) + " ");
+            System.out.println(
+                    nowPlaying.get(j).get(0) + " " + nowPlaying.get(j).get(1) + " " + nowPlaying.get(j).get(2) + " ");
         }
-        ListIterator<String> iterator = lyrics.listIterator();
-        for(Part x : sound){
-            if(nowPlaying.get(j).get(2) == -1){
+
+        for (Input sound : songs.get(title)) {
+            if (nowPlaying.get(j).get(2) == -1) {
                 break;
             }
-            playSound(x,nowPlaying.get(j).get(0),nowPlaying.get(j).get(1),iterator,sound,j);
+            playSound(sound, title, j);
         }
         out.println("FIN");
         out.flush();
     }
-    
-    private void playSound(Part sound, int tempo, int transponate, ListIterator<String> iterator, List<Part> soundList, int num) throws InterruptedException {
-        if(sound instanceof Repeat){
-            int ind = soundList.indexOf(sound);
-            for(int i = rep(((Repeat) sound).getPrevious(),ind,soundList); i < ((Repeat) sound).getPrevious() ; ++i){
-                playSound(soundList.get(i), tempo,transponate, iterator,soundList,num);
+
+    public void playSound(Input sound, String title, int num) throws InterruptedException {
+        if (sound instanceof Repeat) {
+            int ind = songs.get(title).indexOf(sound);
+            for (int k = 0; k < ((Repeat) sound).times; ++k) {
+                for (int i = ind - ((Repeat) sound).previous; i < ind; ++i) {
+                    if (songs.get(title).get(i) instanceof Sound && !((Sound) songs.get(title).get(i)).note.equals("R"))
+                        playSound(songs.get(title).get(i), title, num);
+                }
             }
         } else {
-            sleep(tempo * ((Sound) sound).getLength());
-            if(nowPlaying.get(num).get(2) == -1){
+           
+            if (nowPlaying.get(num).get(2) == -1) {
                 return;
             }
-            String note = transpone(((Sound) sound).getNote(), nowPlaying.get(num).get(1));
-            out.print(note);
-            if(!((Sound) sound).getNote().equals("R")){
-                String lyrics = iterator.hasNext() ? iterator.next() : "???";
-                out.print(" " + lyrics);
+            
+            if (((Sound) sound).note.equals("R")) {
+                out.println(((Sound) sound).note);
+                out.flush();
+                Thread.sleep(nowPlaying.get(num).get(0) * ((Sound) sound).length);
+                return;
             }
+            String note = transpone(((Sound) sound).note, nowPlaying.get(num).get(1));
+            out.print(note);
+            String lyrics = this.lyrics.get(title).size() > nowPlaying.get(num).get(2)
+                    ? this.lyrics.get(title).get(nowPlaying.get(num).get(2))
+                    : "???";
+            nowPlaying.get(num).set(2, nowPlaying.get(num).get(2) + 1);
+            out.print(" " + lyrics);
             out.println();
             out.flush();
+            Thread.sleep(nowPlaying.get(num).get(0) * ((Sound) sound).length);
         }
     }
     
-    private int rep(int prev, int ind, List<Part> soundList){
-        int k = prev;
-        for(int j = ind; j>0; --j){
-            if(soundList.get(j) instanceof Sound && !((Sound) soundList.get(j)).getNote().equals("R")){
-                --k;
-            }
-            if(k==0){
-                return j;
-            }
-        }
-        return 0;
-    }
-    
-    private String transpone(String baseNote, int trans){
+    public String transpone(String baseNote, int trans){
         int[] note = { 69, 71, 60, 62, 64, 65, 67 };
         int nval = -1;
         String[] tmp = baseNote.split(" ");
@@ -272,7 +253,7 @@ class Client extends Thread {
         return "";
     }
 
-    String convertMidiValueToNote(int value, boolean preferHigher) {
+    public String convertMidiValueToNote(int value, boolean preferHigher) {
         HashMap<String, Integer> baseNotes = new HashMap<String, Integer>() {{
             put("C", 60);
             put("C#/Db", 61);
@@ -306,6 +287,4 @@ class Client extends Thread {
             midi += String.format("/%d", octave);
         return midi;
     }
-    
 }
-
