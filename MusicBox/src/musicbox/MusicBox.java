@@ -152,8 +152,12 @@ class Client extends Thread {
                 inputs.add(sound);
             }
         }
-        songs.put(title, inputs);
-        lyrics.put(title, new ArrayList<>());
+        synchronized(songs) {
+            songs.put(title, inputs);
+        }
+        synchronized(lyrics) {
+            lyrics.put(title, new ArrayList<>());
+        }
         System.out.println("Song added: " + title);
     }
     
@@ -162,12 +166,18 @@ class Client extends Thread {
         out.flush();
         String[] tmp = in.nextLine().split(" ");
         List<String> list = Arrays.asList(tmp);
-        lyrics.put(title, new ArrayList<>(list));
+        synchronized(lyrics) {
+            lyrics.put(title, new ArrayList<>(list));
+        }
         System.out.println("Lyrics added for song: " + title);
     }
 
     public void playSong(int tempo, int trans, String title) throws InterruptedException {
-        if (!songs.containsKey(title)) {
+        boolean  songcheck = false;
+        synchronized(songs) {
+            songcheck = songs.containsKey(title);
+        }
+        if (songcheck == false) {
             out.println("FIN");
             out.flush();
             return;
@@ -185,8 +195,11 @@ class Client extends Thread {
             System.out.println(
                     nowPlaying.get(j).get(0) + " " + nowPlaying.get(j).get(1) + " " + nowPlaying.get(j).get(2) + " ");
         }
-
-        for (Input sound : songs.get(title)) {
+        ArrayList<Input> inputs = new ArrayList<>();
+        synchronized(songs) {
+            inputs = songs.get(title);
+        }
+        for (Input sound : inputs) {
             if (nowPlaying.get(j).get(2) == -1) {
                 break;
             }
@@ -198,11 +211,17 @@ class Client extends Thread {
 
     public void playSound(Input sound, String title, int num) throws InterruptedException {
         if (sound instanceof Repeat) {
-            int ind = songs.get(title).indexOf(sound);
+            int ind;
+            ArrayList<Input> sounds;
+            synchronized(songs) {
+                ind = songs.get(title).indexOf(sound);
+                sounds = songs.get(title);
+            }
+            //int ind = songs.get(title).indexOf(sound);
             for (int k = 0; k < ((Repeat) sound).times; ++k) {
                 for (int i = ind - ((Repeat) sound).previous; i < ind; ++i) {
-                    if (songs.get(title).get(i) instanceof Sound && !((Sound) songs.get(title).get(i)).note.equals("R"))
-                        playSound(songs.get(title).get(i), title, num);
+                    if (sounds.get(i) instanceof Sound && !((Sound) sounds.get(i)).note.equals("R"))
+                        playSound(sounds.get(i), title, num);
                 }
             }
         } else {
@@ -219,8 +238,12 @@ class Client extends Thread {
             }
             String note = transpone(((Sound) sound).note, nowPlaying.get(num).get(1));
             out.print(note);
-            String lyrics = this.lyrics.get(title).size() > nowPlaying.get(num).get(2)
-                    ? this.lyrics.get(title).get(nowPlaying.get(num).get(2))
+            ArrayList<String> lyricss = new ArrayList<>();
+            synchronized(lyrics) {
+                lyricss = this.lyrics.get(title);
+            }
+            String lyrics = lyricss.size() > nowPlaying.get(num).get(2)
+                    ? lyricss.get(nowPlaying.get(num).get(2))
                     : "???";
             nowPlaying.get(num).set(2, nowPlaying.get(num).get(2) + 1);
             out.print(" " + lyrics);
